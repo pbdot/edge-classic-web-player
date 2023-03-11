@@ -31,88 +31,93 @@ enum EdgeState {
 
 const Choose: FunctionComponent<{ callback: (wad: string) => void }> = ({ callback }) => {
 
-    let database: IDBDatabase | undefined;
+    if (typeof window !== "undefined") {
 
-    const dbrequest = window.indexedDB.open('/edge-classic');
+        let database: IDBDatabase | undefined;
 
-    dbrequest.onerror = function (e) {
-        console.error('Unable to open database.');
-    }
+        const dbrequest = window.indexedDB.open('/edge-classic');
 
-    dbrequest.onupgradeneeded = (e) => {
-        // Save the IDBDatabase interface
-        const db = (e.target as IDBOpenDBRequest).result as IDBDatabase;
-
-        if (!db.objectStoreNames.contains("FILE_DATA")) {
-            console.log("Creating FILE_DATA object store");
-            const store = db.createObjectStore("FILE_DATA", {});
-            store.createIndex("timestamp", "timestamp", { unique: false });
-
+        dbrequest.onerror = function (e) {
+            console.error('Unable to open database.');
         }
-    };
 
-    dbrequest.onsuccess = (e) => {
-        const db = (e.target as IDBOpenDBRequest).result as IDBDatabase;
-        database = db;
+        dbrequest.onupgradeneeded = (e) => {
+            // Save the IDBDatabase interface
+            const db = (e.target as IDBOpenDBRequest).result as IDBDatabase;
+
+            if (!db.objectStoreNames.contains("FILE_DATA")) {
+                console.log("Creating FILE_DATA object store");
+                const store = db.createObjectStore("FILE_DATA", {});
+                store.createIndex("timestamp", "timestamp", { unique: false });
+
+            }
+        };
+
+        dbrequest.onsuccess = (e) => {
+            const db = (e.target as IDBOpenDBRequest).result as IDBDatabase;
+            database = db;
+        }
+
+        return <div>
+            <div style="padding:24px;text-align:center">
+                <button style="font-size:24px;padding:8px" onClick={() => {
+                    callback("freedoom2.wad");
+                }}>Play Freedoom</button>
+            </div>
+            <div style="padding:24px;text-align:center">
+                <button style="font-size:24px;padding:8px" onClick={() => document.getElementById('getWadFile').click()}>Choose Wad</button>
+            </div>
+            <input id="getWadFile" style="display:none" type="file" onChange={(e) => {
+
+                if (!database) {
+                    console.error("No database on wad upload");
+                    return;
+                }
+
+                //const file = e.target.files[0];
+                const files = (e.target as any).files as File[];
+                if (files.length !== 1) {
+                    e.preventDefault();
+                    alert("Please select a single wad file");
+                    return;
+                }
+
+                const file = files[0];
+                if (!file.name.toLowerCase().endsWith(".wad")) {
+                    e.preventDefault();
+                    alert("Please select a single wad file");
+                    return;
+                }
+
+                var reader = new FileReader();
+                reader.readAsArrayBuffer(file);
+
+                reader.onload = function (e) {
+                    //alert(e.target.result);
+                    let bits = e.target.result;
+
+                    const contents = new Uint8Array(bits as ArrayBuffer);
+
+                    const trans = database.transaction(['FILE_DATA'], 'readwrite');
+                    const path = `/edge-classic/${file.name}`;
+                    let addReq = trans.objectStore('FILE_DATA').put({ timestamp: new Date(), mode: 33206, contents: contents }, path);
+
+                    addReq.onerror = function (e) {
+                        console.log('error storing data');
+                        console.error(e);
+                    }
+
+                    trans.oncomplete = function (e) {
+                        console.log('data stored');
+                        callback(file.name);
+                    }
+                }
+
+            }} />
+        </div>
+    } else {
+        return null;
     }
-
-    return <div>
-        <div style="padding:24px;text-align:center">
-            <button style="font-size:24px;padding:8px" onClick={() => {
-                callback("freedoom2.wad");
-            }}>Play Freedoom</button>
-        </div>
-        <div style="padding:24px;text-align:center">
-            <button style="font-size:24px;padding:8px" onClick={() => document.getElementById('getWadFile').click()}>Choose Wad</button>
-        </div>
-        <input id="getWadFile" style="display:none" type="file" onChange={(e) => {
-
-            if (!database) {
-                console.error("No database on wad upload");
-                return;
-            }
-
-            //const file = e.target.files[0];
-            const files = (e.target as any).files as File[];
-            if (files.length !== 1) {
-                e.preventDefault();
-                alert("Please select a single wad file");
-                return;
-            }
-
-            const file = files[0];
-            if (!file.name.toLowerCase().endsWith(".wad")) {
-                e.preventDefault();
-                alert("Please select a single wad file");
-                return;
-            }
-
-            var reader = new FileReader();
-            reader.readAsArrayBuffer(file);
-
-            reader.onload = function (e) {
-                //alert(e.target.result);
-                let bits = e.target.result;
-
-                const contents = new Uint8Array(bits as ArrayBuffer);
-
-                const trans = database.transaction(['FILE_DATA'], 'readwrite');
-                const path = `/edge-classic/${file.name}`;
-                let addReq = trans.objectStore('FILE_DATA').put({ timestamp: new Date(), mode: 33206, contents: contents }, path);
-
-                addReq.onerror = function (e) {
-                    console.log('error storing data');
-                    console.error(e);
-                }
-
-                trans.oncomplete = function (e) {
-                    console.log('data stored');
-                    callback(file.name);
-                }
-            }
-
-        }} />
-    </div>
 }
 
 const Loading = () => {
